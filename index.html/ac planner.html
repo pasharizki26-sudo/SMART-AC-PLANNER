@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SMART AC PLANNER</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #0f172a;
+        color: white;
+        margin: 0;
+        padding: 0;
+        transition: 0.4s;
+        overflow-x: hidden;
+    }
+
+    body.light {
+        background: #f5f5f5;
+        color: #111;
+    }
+
+    .toggle-mode {
+        position: fixed;
+        right: 20px;
+        top: 20px;
+        padding: 10px 18px;
+        background: #38bdf8;
+        border-radius: 8px;
+        cursor: pointer;
+        color: black;
+        font-weight: bold;
+        z-index: 10;
+    }
+
+    .container {
+        max-width: 480px;
+        margin: auto;
+        padding: 20px;
+        text-align: center;
+        position: relative;
+    }
+
+    .slide {
+        display: none;
+        animation: fade 0.5s ease-in-out;
+        position: relative;
+    }
+
+    @keyframes fade {
+        from { opacity: 0; transform: translateY(20px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    input, select {
+        width: 90%;
+        padding: 12px;
+        margin: 8px 0;
+        border-radius: 10px;
+        border: none;
+        font-size: 16px;
+    }
+
+    button {
+        background: #38bdf8;
+        color: black;
+        font-weight: bold;
+        border: none;
+        padding: 12px 25px;
+        border-radius: 12px;
+        font-size: 18px;
+        cursor: pointer;
+        margin-top: 15px;
+    }
+
+    button:hover {
+        background: #0ea5e9;
+    }
+
+    .gambar-ac {
+        width: 200px;
+        border-radius: 12px;
+        margin: 15px 0;
+    }
+
+    .nav-btn {
+        background: #1e293b;
+        padding: 10px 20px;
+        margin: 5px;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        display: inline-block;
+    }
+
+    body.light .nav-btn {
+        background: #ddd;
+        color: #111;
+    }
+
+    /* Efek uap dingin */
+    .cool-vapor {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        background: radial-gradient(circle, rgba(56,189,248,0.4) 0%, rgba(56,189,248,0) 70%);
+        border-radius: 50%;
+        pointer-events: none;
+        animation: vaporMove 4s infinite ease-in-out;
+    }
+
+    @keyframes vaporMove {
+        0% {
+            transform: translateY(0) scale(0.3);
+            opacity: 0.3;
+        }
+        50% {
+            transform: translateY(-120px) scale(1);
+            opacity: 0.6;
+        }
+        100% {
+            transform: translateY(-250px) scale(1.2);
+            opacity: 0;
+        }
+    }
+
+    /* Animasi tips slide 7 */
+    .tip-item {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+</style>
+</head>
+<body>
+
+<div class="toggle-mode" onclick="toggleMode()">Mode Gelap/Terang</div>
+
+<div class="container">
+
+    <!-- SLIDE 1 -->
+   <div class="slide" id="slide1" style="display:block;">
+    <h3>SMART AC PLANNER</h3>
+
+    <input type="number" id="panjang" placeholder="Masukkan panjang ruangan (meter)">
+    <input type="number" id="lebar" placeholder="Masukkan lebar ruangan (meter)">
+    <input type="number" id="tinggi" placeholder="Masukkan tinggi ruangan (meter)">
+    <input type="number" id="orang" placeholder="Jumlah orang di ruangan">
+
+    <select id="jenis_ruangan">
+        <option value="rumah">Rumah Tinggal</option>
+        <option value="kantor">Ruang Kantor</option>
+        <option value="toko">Toko / Ruko</option>
+        <option value="supermarket">Supermarket</option>
+    </select>
+
+    <button onclick="hitungAC()">Hitung AC</button>
+
+    <p id="hasil"></p>
+    <p id="rekomendasi"></p>
+    <p id="daya"></p>
+
+    <div class="nav-btn" onclick="nextSlide(2)">Lanjut ></div>
+</div>
+
+<script>
+// Ambil data penggunaan dari localStorage atau buat default
+let usageData = JSON.parse(localStorage.getItem('acUsage')) || {
+    days: ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'],
+    kWh: [0,0,0,0,0,0,0],
+    costPerKWh: 1500
+};
+
+// Fungsi menyimpan penggunaan AC
+function saveACUsage(pk) {
+    // Misal AC menyala 8 jam/hari
+    let energyUsed = pk * 750 / 1000 * 8; // kWh
+
+    let today = new Date().getDay(); // 0=minggu, 1=senin, ...,6=sabtu
+    let index = today === 0 ? 6 : today-1; // array Senin=0
+
+    usageData.kWh[index] += energyUsed;
+
+    localStorage.setItem('acUsage', JSON.stringify(usageData));
+}
+
+// Fungsi menghitung AC
+function hitungAC() {
+    let p = parseFloat(document.getElementById("panjang").value);
+    let l = parseFloat(document.getElementById("lebar").value);
+    let t = parseFloat(document.getElementById("tinggi").value);
+    let orang = parseInt(document.getElementById("orang").value) || 0;
+    let jenis = document.getElementById("jenis_ruangan").value;
+
+    if (!p || !l || !t) {
+        document.getElementById("hasil").innerHTML = "Masukkan panjang, lebar dan tinggi ruangan!";
+        return;
+    }
+
+    // Volume ruangan
+    let volume = p * l * t;
+
+    // Kebutuhan dasar (BTU menggunakan volume)
+    let btu = volume * 250;
+
+    // Penyesuaian jenis ruangan
+    if (jenis === "kantor") btu *= 1.2;
+    if (jenis === "toko") btu *= 1.3;
+    if (jenis === "supermarket") btu *= 1.4;
+
+    // Tambahan panas dari orang
+    btu += orang * 600;
+
+    let pk = (btu / 9000).toFixed(1);
+
+    document.getElementById("hasil").innerHTML =
+        `Volume ruangan: ${volume} m³<br>
+        Jumlah orang: ${orang}<br>
+        Kebutuhan pendinginan: ${btu} BTU<br>
+        <b>AC yang cocok: ${pk} PK</b>`;
+
+    let rekom = `
+        <br><b>Rekomendasi Merk AC:</b><br>
+        • Daikin<br>
+        • Panasonic<br>
+        • Sharp<br>
+        • LG<br>
+        • Gree<br><br>
+    `;
+    document.getElementById("rekomendasi").innerHTML = rekom;
+
+    let watt = pk * 750;
+    let tarif = 1500;
+
+    let perJam = (watt / 1000) * tarif;
+    let perHari = perJam * 8;
+    let perBulan = perHari * 30;
+
+    document.getElementById("daya").innerHTML =
+        `<b>Estimasi Pemakaian Listrik:</b><br>
+        Daya AC: ${watt} watt<br>
+        Biaya per jam: Rp ${perJam.toFixed(0)}<br>
+        Per hari (8 jam): Rp ${perHari.toFixed(0)}<br>
+        Per bulan: Rp ${perBulan.toFixed(0)}<br>`;
+
+    // Simpan penggunaan AC ke statistik (slide3)
+    saveACUsage(pk);
+}
+</script>
+
+
+    <!-- SLIDE 2 -->
+    <div class="slide" id="slide2" style="background:#1e293b; padding:20px; border-radius:12px; max-width:400px; margin:auto; text-align:center;">
+        <h2>Suhu Cuaca Realtime</h2>
+        <label>Pilih Kota:</label>
+        <select id="city" style="padding:6px; border-radius:6px;">
+            <option value="Pangkalpinang">Pangkalpinang</option>
+            <option value="Jakarta">Jakarta</option>
+            <option value="Bandung">Bandung</option>
+            <option value="Surabaya">Surabaya</option>
+        </select>
+        <h3 id="temperature">Memuat...</h3>
+
+        <div class="nav-btn" onclick="prevSlide(1)">< Kembali</div>
+        <div class="nav-btn" onclick="nextSlide(3)">Lanjut ></div>
+    </div>
+
+  <!-- SLIDE 3 -->
+<!-- SLIDE 3: Reminder & Alarm AC dengan Animasi -->
+<div class="slide" id="slide3" style="text-align:center; position:relative; overflow:hidden;">
+    <h3>⏰ Reminder & Alarm AC</h3>
+
+    <p>Atur pengingat untuk menyalakan/mematikan AC atau servis rutin:</p>
+
+    <label>Pesan Reminder:</label><br>
+    <input type="text" id="reminderMessage" placeholder="Contoh: Nyalakan AC" 
+           style="padding:6px; width:80%; border-radius:6px;"><br><br>
+
+    <label>Waktu Alarm:</label><br>
+    <input type="time" id="reminderTime" style="padding:6px; border-radius:6px;"><br><br>
+
+    <label>Pengulangan:</label><br>
+    <select id="reminderRepeat" style="padding:6px; border-radius:6px;">
+        <option value="once">Sekali</option>
+        <option value="daily">Harian</option>
+        <option value="weekly">Mingguan</option>
+    </select><br><br>
+
+    <button onclick="setReminder()">Set Reminder</button>
+
+    <p id="reminderStatus" style="margin-top:10px; color:#38bdf8;"></p>
+
+    <h4>Countdown ke Reminder</h4>
+    <p id="countdown" style="font-size:18px; font-weight:bold;"></p>
+
+    <div class="nav-btn" onclick="prevSlide(2)">< Kembali</div>
+    <div class="nav-btn" onclick="nextSlide(4)">Lanjut ></div>
+
+    <!-- Elemen uap dingin -->
+    <div id="steamEffect" style="
+        position:absolute;
+        width:100%;
+        height:100%;
+        top:0; left:0;
+        pointer-events:none;
+        z-index:1;
+        overflow:hidden;">
+    </div>
+</div>
+
+<style>
+/* Animasi uap dingin */
+.steam {
+    position: absolute;
+    bottom: 0;
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 50%;
+    animation: rise 4s linear infinite;
+}
+
+@keyframes rise {
+    0% { transform: translateY(0) scale(1); opacity:0.4; }
+    50% { transform: translateY(-80px) scale(1.2); opacity:0.6; }
+    100% { transform: translateY(-160px) scale(1.4); opacity:0; }
+}
+
+/* Flash merah saat alarm aktif */
+.flash-red {
+    position:absolute;
+    width:100%;
+    height:100%;
+    top:0;
+    left:0;
+    background:red;
+    opacity:0;
+    z-index:2;
+    pointer-events:none;
+    animation: flash 0.6s ease-in-out 3;
+}
+
+@keyframes flash {
+    0%,100% { opacity:0; }
+    50% { opacity:0.5; }
+}
+</style>
+
+<script>
+// Bunyi alarm
+const alarmSound = new Audio('alarm.mp3'); // pastikan ada file alarm.mp3
+
+// Request permission notifikasi
+if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+}
+
+// Fungsi set reminder
+function setReminder() {
+    const message = document.getElementById("reminderMessage").value;
+    const time = document.getElementById("reminderTime").value;
+    const repeat = document.getElementById("reminderRepeat").value;
+
+    if (!message || !time) { alert("Masukkan pesan dan waktu reminder!"); return; }
+
+    const [hours, minutes] = time.split(":").map(Number);
+
+    let reminders = JSON.parse(localStorage.getItem("acReminders")) || [];
+    reminders.push({ message, hours, minutes, repeat });
+    localStorage.setItem("acReminders", JSON.stringify(reminders));
+
+    document.getElementById("reminderStatus").innerHTML = 
+        `✅ Reminder diatur pukul ${time} (${repeat}) dengan pesan: "${message}"`;
+}
+
+// Fungsi notifikasi & alarm
+function triggerReminder(message) {
+    // Bunyi alarm
+    alarmSound.play().catch(e=>console.log(e));
+
+    // Notifikasi browser
+    if (Notification.permission === "granted") {
+        new Notification("SMART AC Reminder", { body: message });
+    } else {
+        alert(message);
+    }
+
+    // Flash merah
+    const flash = document.createElement("div");
+    flash.className = "flash-red";
+    document.getElementById("slide3").appendChild(flash);
+    setTimeout(()=>flash.remove(), 2000);
+
+    // Tambah uap dingin saat alarm
+    createSteam(10);
+}
+
+// Fungsi membuat uap dingin
+function createSteam(count=5) {
+    const container = document.getElementById("steamEffect");
+    for(let i=0;i<count;i++){
+        const steam = document.createElement("div");
+        steam.className = "steam";
+        steam.style.left = Math.random()*100 + "%";
+        steam.style.width = (20+Math.random()*20)+"px";
+        steam.style.height = steam.style.width;
+        steam.style.animationDuration = (3+Math.random()*2)+"s";
+        container.appendChild(steam);
+        setTimeout(()=>steam.remove(), 4000);
+    }
+}
+
+// Cek reminder setiap detik
+setInterval(() => {
+    const now = new Date();
+    let reminders = JSON.parse(localStorage.getItem("acReminders")) || [];
+
+    reminders.forEach(reminder => {
+        if (reminder.hours === now.getHours() && reminder.minutes === now.getMinutes()) {
+            triggerReminder(reminder.message);
+
+            if (reminder.repeat === "once") {
+                reminders = reminders.filter(r => r !== reminder);
+                localStorage.setItem("acReminders", JSON.stringify(reminders));
+            }
+        }
+    });
+
+    updateCountdown(reminders);
+}, 1000);
+
+// Fungsi countdown timer
+function updateCountdown(reminders) {
+    if (reminders.length === 0) {
+        document.getElementById("countdown").innerHTML = "Tidak ada reminder aktif.";
+        return;
+    }
+
+    const now = new Date();
+    const nextReminder = reminders[0];
+    let target = new Date();
+    target.setHours(nextReminder.hours, nextReminder.minutes, 0, 0);
+
+    if (target < now) {
+        if (nextReminder.repeat === "daily") target.setDate(target.getDate()+1);
+        if (nextReminder.repeat === "weekly") target.setDate(target.getDate()+7);
+    }
+
+    const diff = target - now;
+    const hrs = Math.floor(diff / 1000 / 60 / 60);
+    const mins = Math.floor((diff / 1000 / 60) % 60);
+    const secs = Math.floor((diff / 1000) % 60);
+
+    document.getElementById("countdown").innerHTML = 
+        `⏳ ${hrs} jam ${mins} menit ${secs} detik lagi ke "${nextReminder.message}"`;
+}
+</script>
+
+
+
+
+    <!-- SLIDE 4 -->
+    <div class="slide" id="slide4" style="text-align:center;">
+        <h3 style="margin-bottom:20px;">MACAM MACAM JENIS AC</h3>
+        <div class="ac-images" style="display:flex; flex-wrap:wrap; justify-content:center; gap:15px;">
+            <img src="ac cassete.jpg" class="gambar-ac anim-ac">
+            <img src="ac floor.jpg" class="gambar-ac anim-ac">
+            <img src="split.jpg" class="gambar-ac anim-ac">
+            <img src="ac central.jpg" class="gambar-ac anim-ac">
+        </div>
+        <div class="nav-btn" onclick="prevSlide(3)">< Kembali</div>
+       <div class="nav-btn" onclick="prevSlide(5)">< lanjut</div>
+
+    </div>
+
+    <!-- SLIDE 5 -->
+<div class="slide" id="slide5" style="text-align:center; display:none;">
+    <h3>⚠️ Penyebab AC Cepat Rusak & Kotor</h3>
+
+    <ul id="penyebabList" style="list-style:none; padding-left:0; margin-top:20px; text-align:left;">
+        <li class="penyebab-item">🧹 Filter AC jarang dibersihkan atau tersumbat debu.</li>
+        <li class="penyebab-item">🚪 Ruangan sering terbuka sehingga AC bekerja lebih keras.</li>
+        <li class="penyebab-item">🌡 Pengaturan suhu terlalu rendah secara terus-menerus.</li>
+        <li class="penyebab-item">🔧 Servis AC jarang dilakukan atau tidak rutin.</li>
+        <li class="penyebab-item">☀ Unit outdoor terkena sinar matahari langsung tanpa pelindung.</li>
+        <li class="penyebab-item">💧 Menggunakan AC saat kondisi lembap tanpa mode Dry.</li>
+        <li class="penyebab-item">⚡ Kabel listrik atau daya tidak stabil.</li>
+    </ul>
+
+    <div class="nav-btn" onclick="prevSlide(4)">< Kembali</div>
+    <div class="nav-btn" onclick="nextSlide(6)">Lanjut ></div>
+</div>
+
+
+    <!-- SLIDE 6 -->
+    <div class="slide" id="slide6">
+        <h3>Jenis–Jenis AC & Kegunaannya</h3>
+        <table style="width:100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; background:white; color:black; border-radius:10px; overflow:hidden;">
+            <tr style="background:#38bdf8; color:black; font-weight:bold;">
+                <th style="padding:8px; border:1px solid #ccc;">Jenis AC</th>
+                <th style="padding:8px; border:1px solid #ccc;">Deskripsi</th>
+                <th style="padding:8px; border:1px solid #ccc;">Cocok Untuk</th>
+            </tr>
+            <tr><td>AC Split</td><td>Unit dinding, hemat energi</td><td>Rumah, kamar, apartemen</td></tr>
+            <tr><td>AC Cassette</td><td>Terpasang di plafon, angin merata</td><td>Kantor, toko, restoran</td></tr>
+            <tr><td>AC Standing</td><td>Kapasitas besar, angin kuat</td><td>Aula, gedung, hall event</td></tr>
+            <tr><td>AC Portable</td><td>Bisa dipindah, tanpa instalasi</td><td>Kos, ruangan darurat</td></tr>
+            <tr><td>AC Window</td><td>Model kotak, dipasang di jendela</td><td>Rumah lama, budget kecil</td></tr>
+            <tr><td>AC Central</td><td>Satu sistem besar untuk gedung</td><td>Hotel, mall, gedung bertingkat</td></tr>
+        </table>
+        <div class="nav-btn" onclick="prevSlide(5)">< Kembali</div>
+        <div class="nav-btn" onclick="nextSlide(7)">Lanjut ></div>
+    </div>
+
+    <!-- SLIDE 7 -->
+   <!-- SLIDE 7: Statistik Penjualan & Tren AC (Bar Chart) -->
+<div class="slide" id="slide7" style="text-align:center;">
+    <h3>📊 Tren & Penjualan AC 2024–2025</h3>
+
+    <canvas id="acTrendChart" width="400" height="250" style="background:white; border-radius:12px; margin-top:15px;"></canvas>
+
+    <p style="margin-top:10px;">
+        Diagram batang ini menunjukkan jenis AC yang paling banyak digunakan dan tren penjualan di Indonesia.
+    </p>
+
+    <div class="nav-btn" onclick="prevSlide(6)">< Kembali</div>
+    <div class="nav-btn" onclick="nextSlide(8)">Lanjut ></div>
+</div>
+
+<!-- Tambahkan Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Data berdasarkan tren penjualan
+const acTrendData = {
+    labels: ['2024', '2025'],
+    datasets: [
+        {
+            label: 'AC Split (juta unit)',
+            data: [4.0, 4.5],
+            backgroundColor: 'rgba(56,189,248,0.7)',
+            borderColor: 'rgba(56,189,248,1)',
+            borderWidth: 1
+        },
+        {
+            label: 'AC Cassette (juta unit)',
+            data: [0.8, 1.0],
+            backgroundColor: 'rgba(34,197,94,0.7)',
+            borderColor: 'rgba(34,197,94,1)',
+            borderWidth: 1
+        },
+        {
+            label: 'AC Standing / Central (juta unit)',
+            data: [0.5, 0.6],
+            backgroundColor: 'rgba(249,115,22,0.7)',
+            borderColor: 'rgba(249,115,22,1)',
+            borderWidth: 1
+        }
+    ]
+};
+
+// Konfigurasi chart bar
+const acTrendConfig = {
+    type: 'bar',
+    data: acTrendData,
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { position: 'top' },
+            title: { display: true, text: 'Penjualan AC di Indonesia (2024–2025)' }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Juta Unit Terjual' }
+            },
+            x: {
+                title: { display: true, text: 'Tahun' }
+            }
+        }
+    }
+};
+
+// Render chart
+const acTrendChart = new Chart(
+    document.getElementById('acTrendChart'),
+    acTrendConfig
+);
+</script>
+
+
+
+    <!-- SLIDE 8 -->
+    <!-- SLIDE 8: FAQ & Rating (Animasi) -->
+<div class="slide" id="slide8" style="text-align:center;">
+    <h3>❓ FAQ & Penilaian SMART AC PLANNER</h3>
+
+    <!-- FAQ Section -->
+    <div style="text-align:left; margin-top:15px; background:white; color:black; padding:15px; border-radius:12px;">
+        <h4>FAQ</h4>
+
+        <div class="faq-item">
+            <button class="faq-question">1. Bagaimana cara menghitung AC yang cocok?</button>
+            <div class="faq-answer">
+                Masukkan dimensi ruangan, jumlah orang, dan jenis ruangan. Aplikasi akan menghitung kapasitas AC yang ideal.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">2. Apakah bisa mengatur reminder AC?</button>
+            <div class="faq-answer">
+                Ya! Anda dapat mengatur alarm untuk menyalakan/mematikan AC atau servis rutin.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">3. Apakah data penggunaan dan biaya listrik akurat?</button>
+            <div class="faq-answer">
+                Estimasi didasarkan pada kapasitas AC dan tarif listrik rata-rata. Hasil aktual bisa sedikit berbeda.
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">4. Apakah aplikasi ini bisa digunakan di HP dan tablet?</button>
+            <div class="faq-answer">
+                Ya, aplikasi berbasis web ini responsive untuk desktop maupun mobile.
+            </div>
+        </div>
+    </div>
+
+    <!-- Rating Section -->
+    <div style="margin-top:20px; background:white; color:black; padding:15px; border-radius:12px;">
+        <h4>🌟 Berikan Penilaian Anda</h4>
+        <p>Pilih rating dari 1 hingga 5 bintang:</p>
+        <div id="ratingStars" style="font-size:24px; cursor:pointer;">
+            ⭐ ⭐ ⭐ ⭐ ⭐
+        </div>
+        <p id="ratingValue" style="margin-top:10px; font-weight:bold;"></p>
+    </div>
+
+    <div class="nav-btn" onclick="prevSlide(7)">< Kembali</div>
+</div>
+
+<style>
+/* FAQ Animasi */
+.faq-question {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    border: none;
+    background: #0ea5e9;
+    color: white;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 6px;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+.faq-question:hover {
+    background: #0284c7;
+}
+.faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.4s ease;
+    background: #e0f2fe;
+    padding: 0 10px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+}
+.faq-answer.show {
+    padding: 10px;
+    max-height: 200px; /* cukup untuk jawaban */
+}
+</style>
+
+<script>
+// Rating interaktif
+const starsContainer = document.getElementById("ratingStars");
+starsContainer.addEventListener("click", (e) => {
+    const rect = starsContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const starIndex = Math.ceil(x / (rect.width / 5));
+    let starText = "";
+    for (let i = 1; i <= 5; i++) starText += i <= starIndex ? "⭐ " : "☆ ";
+    starsContainer.innerText = starText.trim();
+    document.getElementById("ratingValue").innerText = `Anda memberi rating: ${starIndex} / 5`;
+});
+
+// FAQ interaktif
+const faqQuestions = document.querySelectorAll(".faq-question");
+faqQuestions.forEach(q => {
+    q.addEventListener("click", () => {
+        const answer = q.nextElementSibling;
+        answer.classList.toggle("show");
+    });
+});
+</script>
+
+</div>
+
+<script>
+function toggleMode() {
+    document.body.classList.toggle("light");
+}
+
+function nextSlide(no) {
+    document.querySelectorAll(".slide").forEach(s => s.style.display = "none");
+    document.getElementById("slide" + no).style.display = "block";
+}
+
+function prevSlide(no) {
+    document.querySelectorAll(".slide").forEach(s => s.style.display = "none");
+    document.getElementById("slide" + no).style.display = "block";
+}
+
+function hitungAC() {
+    let p = parseFloat(document.getElementById("panjang").value);
+    let l = parseFloat(document.getElementById("lebar").value);
+    let t = parseFloat(document.getElementById("tinggi").value);
+    let orang = parseInt(document.getElementById("orang").value) || 0;
+    let jenis = document.getElementById("jenis_ruangan").value;
+
+    if (!p || !l || !t) {
+        document.getElementById("hasil").innerHTML = "Masukkan panjang, lebar dan tinggi ruangan!";
+        return;
+    }
+
+    let volume = p*l*t;
+    let btu = volume*250;
+    if (jenis === "kantor") btu*=1.2;
+    if (jenis === "toko") btu*=1.3;
+    btu+=orang*600;
+    let pk=(btu/9000).toFixed(1);
+
+    document.getElementById("hasil").innerHTML=`Volume ruangan: ${volume} m³<br>Jumlah orang: ${orang}<br>Kebutuhan pendinginan: ${btu} BTU<br><b>AC yang cocok: ${pk} PK</b>`;
+    document.getElementById("rekomendasi").innerHTML="<br><b>Rekomendasi Merk AC:</b><br>• Daikin<br>• Panasonic<br>• Sharp<br>• LG<br>• Gree<br><br>";
+
+    let watt=pk*750;
+    let tarif=1500;
+    let perJam=(watt/1000)*tarif;
+    let perHari=perJam*8;
+    let perBulan=perHari*30;
+
+    document.getElementById("daya").innerHTML=`<b>Estimasi Pemakaian Listrik:</b><br>Daya AC: ${watt} watt<br>Biaya per jam: Rp ${perJam.toFixed(0)}<br>Per hari (8 jam): Rp ${perHari.toFixed(0)}<br>Per bulan: Rp ${perBulan.toFixed(0)}<br>`;
+}
+
+// Realtime Weather Slide 2
+const API_KEY = "2906d0b7ef317c8561ceff22caf4b028";
+async function getWeather() {
+    let kota=document.getElementById("city").value;
+    let units="metric";
+    let url=`https://api.openweathermap.org/data/2.5/weather?q=${kota}&appid=${API_KEY}&units=${units}`;
+    try {
+        const response=await fetch(url);
+        const data=await response.json();
+        if(data.cod!==200){
+            document.getElementById("temperature").innerHTML="Gagal memuat data cuaca!";
+            return;
+        }
+        document.getElementById("temperature").innerHTML=`<b>${kota}</b><br>Suhu: ${data.main.temp} °C<br>Cuaca: ${data.weather[0].description}`;
+    } catch(err){
+        document.getElementById("temperature").innerHTML="Gagal mengambil data cuaca!";
+        console.error(err);
+    }
+}
+setInterval(getWeather, 10000);
+getWeather();
+document.getElementById("city").addEventListener("change",getWeather);
+
+// Animasi Tips slide 7
+function animateTips(){
+    const tips=document.querySelectorAll("#tipsList .tip-item");
+    tips.forEach((tip,index)=>{
+        tip.style.transition=`all 0.6s ease ${(index+1)*0.3}s`;
+        tip.style.opacity=1;
+        tip.style.transform="translateX(0)";
+    });
+}
+function showSlide7(){
+    nextSlide(7);
+    animateTips();
+}
+
+// Animasi Teks slide 8
+const textList=["Terima kasih telah menggunakan aplikasi ini!","Semoga perhitungan AC membantu Anda!","Tetap gunakan AC dengan bijak dan hemat energi!","SMART AC PLANNER – Solusi terbaik untuk ruangan Anda!"];
+let index=0,charIndex=0;
+function typeEffect(){
+    let currentText=textList[index];
+    document.getElementById("typingText").innerHTML=currentText.substring(0,charIndex);
+    charIndex++;
+    if(charIndex>currentText.length){
+        setTimeout(()=>{charIndex=0; index=(index+1)%textList.length;},1200);
+    }
+    setTimeout(typeEffect,80);
+}
+typeEffect();
+
+// Tambahkan efek uap dingin ke setiap slide
+function addVapor(slideId,count=4){
+    const slide=document.getElementById(slideId);
+    for(let i=0;i<count;i++){
+        const vapor=document.createElement("div");
+        vapor.classList.add("cool-vapor");
+        vapor.style.left=`${20+Math.random()*60}%`;
+        vapor.style.animationDelay=`${i*1.5}s`;
+        slide.appendChild(vapor);
+    }
+}
+["slide1","slide2","slide3","slide4","slide5","slide6","slide7","slide8"].forEach(slideId=>addVapor(slideId));
+</script>
+
+</body>
+</html>
